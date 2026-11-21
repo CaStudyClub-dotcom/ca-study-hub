@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#0b1220">
+  <title>CA Study Hub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="#" aria-label="CA Study Hub home">
+        <span class="brand-symbol">C<span>A</span></span>
+        <span class="brand-name">study<span>hub.</span></span>
+      </a>
+      <button class="avatar" id="profile-button" aria-label="Profile">S</button>
+    </header>
+
+    <main>
+      <section class="welcome">
+        <div class="welcome-copy">
+          <div class="live-tag"><span></span> YOUR CLASSROOM, ANYTIME</div>
+          <h1>Make your next<br>chapter <em>count.</em></h1>
+          <p>Everything you need for your CA Foundation journey, in one place.</p>
+        </div>
+        <div class="hero-art" aria-hidden="true">
+          <div class="orbit orbit-one"></div><div class="orbit orbit-two"></div>
+          <div class="art-card art-back"><span>✦</span><b>LEARN</b><small>GROW EVERY DAY</small></div>
+          <div class="art-card art-front"><div class="mini-bars"><i></i><i></i><i></i><i></i><i></i></div><strong>100%</strong><small>FOCUS MODE</small></div>
+          <div class="art-star">✦</div>
+        </div>
+      </section>
+
+      <section class="quick-stats" aria-label="Learning overview">
+        <div class="stat"><span class="stat-icon blue">▣</span><div><strong>04</strong><small>Subjects</small></div></div>
+        <div class="stat"><span class="stat-icon violet">▶</span><div><strong id="total-lectures">00</strong><small>Lectures</small></div></div>
+        <div class="stat"><span class="stat-icon mint">✧</span><div><strong>∞</strong><small>Possibilities</small></div></div>
+      </section>
+
+      <section class="section-block">
+        <div class="section-heading"><div><span class="kicker">YOUR LEARNING PATH</span><h2>Explore subjects</h2></div><span class="tiny-label">01 — 04</span></div>
+        <div class="subject-grid" id="subject-grid"></div>
+      </section>
+
+      <section class="feature-banner">
+        <div class="feature-text"><span class="kicker light">STUDY SMARTER</span><h3>Small steps.<br>Big results.</h3><p>Stay consistent, one lecture at a time.</p></div>
+        <div class="feature-illustration" aria-hidden="true"><div class="book book-one"></div><div class="book book-two"></div><div class="plant">✳</div></div>
+      </section>
+
+      <section class="section-block lecture-block">
+        <div class="section-heading"><div><span class="kicker">ON YOUR SYLLABUS</span><h2 id="lecture-heading">Latest lectures</h2></div><button class="text-button" id="all-lectures">View all ↗</button></div>
+        <label class="search-box"><span>⌕</span><input id="search" type="search" placeholder="Search lectures or topics..." autocomplete="off"></label>
+        <div id="lecture-list" class="lecture-list"></div>
+      </section>
+
+      <section class="quote-card"><span class="quote-mark">“</span><p>Success is the sum of small efforts, repeated day in and day out.</p><small>YOUR DAILY REMINDER</small></section>
+      <footer><span class="footer-brand">studyhub.</span><span>Built for your CA journey ✦</span></footer>
+    </main>
+
+    <nav class="bottom-nav" aria-label="Main navigation">
+      <button class="nav-item active" data-tab="home"><span>⌂</span><small>Home</small></button>
+      <button class="nav-item" data-tab="courses"><span>▦</span><small>Courses</small></button>
+      <button class="nav-item" data-tab="notes"><span>▤</span><small>Notes</small></button>
+      <button class="nav-item" data-tab="profile"><span>◉</span><small>Profile</small></button>
+    </nav>
+  </div>
+  <script src="lectures.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
