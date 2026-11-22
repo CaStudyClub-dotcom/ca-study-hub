@@ -7,8 +7,9 @@ app = Flask(__name__)
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET")
-SITE_URL = "https://castudyclub-dotcom.github.io/ca-study-hub/"
+ADMIN_CHAT_ID = os.environ.get("ADMIN_CHAT_ID")
 
+SITE_URL = "https://castudyclub-dotcom.github.io/ca-study-hub/"
 API_URL = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
 RESPONSES = {
@@ -29,11 +30,12 @@ def send_message(chat_id, text, keyboard=None):
     if keyboard:
         data["reply_markup"] = keyboard
 
-    requests.post(
+    response = requests.post(
         f"{API_URL}/sendMessage",
         json=data,
         timeout=15
-    ).raise_for_status()
+    )
+    response.raise_for_status()
 
 @app.route("/")
 def home():
@@ -45,12 +47,54 @@ def webhook():
         abort(403)
 
     update = request.get_json(silent=True) or {}
+
+    # 1. Handle new videos uploaded to the storage channel
+    channel_post = update.get("channel_post")
+
+    if channel_post:
+        chat = channel_post.get("chat", {})
+        channel_id = chat.get("id")
+        message_id = channel_post.get("message_id")
+        caption = channel_post.get("caption", "No caption")
+
+        video = channel_post.get("video")
+        document = channel_post.get("document")
+
+        media = video or document
+
+        if media and ADMIN_CHAT_ID:
+            file_id = media.get("file_id")
+            file_size = media.get("file_size", "Unknown")
+
+            details = (
+                "✅ NEW LECTURE RECEIVED!\n\n"
+                f"📚 Channel ID: {channel_id}\n"
+                f"🆔 Message ID: {message_id}\n"
+                f"📝 Caption: {caption}\n"
+                f"📦 File size: {file_size} bytes\n\n"
+                f"🔑 File ID:\n{file_id}\n\n"
+                "Video detected successfully!"
+            )
+
+            send_message(ADMIN_CHAT_ID, details)
+
+        return "OK"
+
+    # 2. Handle normal private messages and commands
     message = update.get("message", {})
+
     chat = message.get("chat", {})
     chat_id = chat.get("id")
     text = message.get("text", "").strip()
 
-    if not chat_id or not text:
+    if not chat_id:
+        return "OK"
+
+    if text == "/id":
+        send_message(chat_id, f"Your Telegram Chat ID is:\n{chat_id}")
+        return "OK"
+
+    if not text:
         return "OK"
 
     command = text.split()[0].split("@")[0].lower()
@@ -64,6 +108,7 @@ def webhook():
                 }
             ]]
         }
+
         send_message(
             chat_id,
             "👋 Welcome to CA Study Hub!\n\n"
