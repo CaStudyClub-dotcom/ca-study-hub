@@ -649,3 +649,59 @@ def miniapp_access(action):
         logging.exception("Mini App access API failed")
         return jsonify({"message": "Access service is temporarily unavailable. Please retry."}), 503
 
+
+
+# Mini App lecture catalogue and one-tap delivery endpoints.
+@app.route("/api/lectures/list", methods=["POST", "OPTIONS"])
+def miniapp_lecture_list():
+    if request.method == "OPTIONS":
+        return ("", 204)
+    body = request.get_json(silent=True) or {}
+    user_id = verify_telegram_init_data(body.get("initData"))
+    if not user_id:
+        return jsonify({"message": "Telegram verification failed. Reopen the Mini App from the bot."}), 401
+    try:
+        rows = db_get("lectures", {
+            "select": "id,subject,chapter_name,lecture_number,caption",
+            "order": "subject.asc,chapter_name.asc,lecture_number.asc",
+            "limit": "1000"
+        })
+        return jsonify({"lectures": rows})
+    except Exception:
+        logging.exception("Mini App lecture catalogue failed")
+        return jsonify({"message": "Lecture library is temporarily unavailable."}), 503
+
+
+@app.route("/api/lectures/send", methods=["POST", "OPTIONS"])
+def miniapp_send_lecture():
+    if request.method == "OPTIONS":
+        return ("", 204)
+    body = request.get_json(silent=True) or {}
+    user_id = verify_telegram_init_data(body.get("initData"))
+    if not user_id:
+        return jsonify({"message": "Telegram verification failed. Reopen the Mini App from the bot."}), 401
+    try:
+        lecture_id = int(body.get("lecture_id"))
+        session = active_session(user_id)
+        if not session:
+            return jsonify({"message": "Your access has expired. Unlock access first."}), 403
+        if int(session.get("lectures_sent") or 0) >= 10:
+            return jsonify({"message": "Your 10-lecture limit has been reached."}), 403
+        rows = db_get("lectures", {
+            "id": f"eq.{lecture_id}",
+            "select": "id",
+            "limit": "1"
+        })
+        if not rows:
+            return jsonify({"message": "This lecture is not available."}), 404
+        # Sends the original stored Telegram channel post to the verified user's private bot chat.
+        deliver_lecture(user_id, user_id, lecture_id)
+        updated = active_session(user_id)
+        return jsonify({"ok": True, "remaining": max(0, 10 - int((updated or {}).get("lectures_sent") or 0)),
+                        "message": "Lecture delivered to your Telegram chat."})
+    except (TypeError, ValueError):
+        return jsonify({"message": "Invalid lecture selection."}), 400
+    except Exception:
+        logging.exception("Mini App lecture delivery failed")
+        return jsonify({"message": "Telegram could not deliver this lecture. Please try again."}), 502
+
