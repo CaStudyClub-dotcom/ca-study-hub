@@ -48,3 +48,33 @@ document.querySelectorAll(".nav-item").forEach(btn=>btn.addEventListener("click"
 }));
 document.getElementById("profile-button").addEventListener("click",()=>alert("Student profile will be added in the next build."));
 renderSubjects();renderLectures();
+
+/* Telegram Mini App access: identity is verified by the backend from signed initData. */
+const accessMessage=document.getElementById("access-message");
+const unlockButton=document.getElementById("unlock-button");
+const accessDetails=document.getElementById("access-details");
+const accessExpiry=document.getElementById("access-expiry");
+const accessRemaining=document.getElementById("access-remaining");
+const ACCESS_API="https://ca-study-hub.onrender.com/api/access";
+async function accessRequest(action){
+  if(!tg?.initData) throw new Error("Please open this app from the CA Study Hub Telegram bot.");
+  const response=await fetch(ACCESS_API+"/"+action,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({initData:tg.initData})});
+  const data=await response.json().catch(()=>({}));
+  if(!response.ok) throw new Error(data.message||"Could not check access. Please try again.");
+  return data;
+}
+function showAccess(data){
+  const active=!!data.active;
+  document.getElementById("access-icon").textContent=active?"🔓":"🔒";
+  accessMessage.textContent=data.message||(active?"Your study pass is active.":"Unlock your study pass to start learning.");
+  accessDetails.hidden=!active;
+  if(active){accessExpiry.textContent="Expires: "+new Date(data.expires_at).toLocaleString();accessRemaining.textContent=data.remaining+" / 10 lectures left";}
+  unlockButton.disabled=false;unlockButton.textContent=active?"Access active ✓":"Unlock free access";unlockButton.classList.toggle("is-active",active);
+}
+async function refreshAccess(){
+  if(!tg?.initData){accessMessage.textContent="Open this Mini App from the Telegram bot to verify your account.";unlockButton.textContent="Open via Telegram";unlockButton.disabled=true;return;}
+  try{showAccess(await accessRequest("status"));}
+  catch(e){accessMessage.textContent=e.message;unlockButton.textContent="Try again";unlockButton.disabled=false;}
+}
+unlockButton.addEventListener("click",async()=>{unlockButton.disabled=true;unlockButton.textContent="Activating…";try{showAccess(await accessRequest("unlock"));}catch(e){accessMessage.textContent=e.message;unlockButton.disabled=false;unlockButton.textContent="Try again";}});
+refreshAccess();
