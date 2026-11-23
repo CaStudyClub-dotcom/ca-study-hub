@@ -14,7 +14,7 @@ function renderSubjects(){
     const b=document.createElement("button");
     b.className=`subject-card ${s.theme}`;
     b.innerHTML=`<div class="subject-top"><span class="subject-icon">${s.icon}</span><span class="subject-number">SUBJECT 0${i+1}</span></div><strong>${s.name}</strong><small>${s.description}</small><span class="arrow">↗</span>`;
-    b.addEventListener("click",()=>{selected=s.id;renderSubjects();loadLectureCatalogue();document.querySelector(".lecture-block").scrollIntoView({behavior:"smooth",block:"start"});});
+    b.addEventListener("click",()=>{selected=s.id;renderSubjects();renderLectures();document.querySelector(".lecture-block").scrollIntoView({behavior:"smooth",block:"start"});});
     grid.appendChild(b);
   });
 }
@@ -77,7 +77,9 @@ document.querySelectorAll(".nav-item").forEach(btn=>btn.addEventListener("click"
   else if(tab==="profile")alert("Student profile and progress tracking will be added in the next build.");
 }));
 document.getElementById("profile-button").addEventListener("click",()=>alert("Student profile will be added in the next build."));
-renderSubjects();renderLectures();
+renderSubjects();
+list.innerHTML='<div class="empty-state">Loading your uploaded lectures…</div>';
+loadLectureCatalogue();
 
 /* Telegram Mini App access: identity is verified by the backend from signed initData. */
 const accessMessage=document.getElementById("access-message");
