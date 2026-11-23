@@ -14,28 +14,58 @@ function renderSubjects(){
     const b=document.createElement("button");
     b.className=`subject-card ${s.theme}`;
     b.innerHTML=`<div class="subject-top"><span class="subject-icon">${s.icon}</span><span class="subject-number">SUBJECT 0${i+1}</span></div><strong>${s.name}</strong><small>${s.description}</small><span class="arrow">↗</span>`;
-    b.addEventListener("click",()=>{selected=s.id;renderSubjects();renderLectures();document.querySelector(".lecture-block").scrollIntoView({behavior:"smooth",block:"start"});});
+    b.addEventListener("click",()=>{selected=s.id;renderSubjects();loadLectureCatalogue();document.querySelector(".lecture-block").scrollIntoView({behavior:"smooth",block:"start"});});
     grid.appendChild(b);
   });
+}
+
+let serverLectures=[];
+let accessActive=false;
+let accessRemaining=0;
+let sendingLecture=false;
+async function loadLectureCatalogue(){
+  if(!tg?.initData){list.innerHTML='<div class="empty-state">Open this app from the Telegram bot to load your lectures.</div>';return;}
+  try{
+    const r=await fetch("https://ca-study-hub.onrender.com/api/lectures/list",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({initData:tg.initData})});
+    const d=await r.json(); if(!r.ok)throw new Error(d.message||"Could not load lectures");
+    serverLectures=d.lectures||[];
+    total.textContent=String(serverLectures.length).padStart(2,"0");
+    renderLectures();
+  }catch(e){list.innerHTML='<div class="empty-state">'+e.message+'</div>';}
 }
 function renderLectures(){
   const s=COURSE_DATA.find(x=>x.id===selected); if(!s)return;
   heading.textContent=s.name+" lectures"; list.innerHTML="";
   const q=(search.value||"").trim().toLowerCase();
-  const rows=(s.lectures||[]).filter(l=>l.title.toLowerCase().includes(q));
-  if(!rows.length){list.innerHTML='<div class="empty-state">No matching lectures yet. New classes will appear here.</div>';return;}
+  const aliases={accounts:["ACCOUNTS","ACCOUNTANCY"],law:["LAW","BUSINESS LAWS"],qa:["QA","QUANTITATIVE APTITUDE"],economics:["ECONOMICS","BUSINESS ECONOMICS"]};
+  const rows=serverLectures.filter(l=>(aliases[s.id]||[]).includes(String(l.subject||"").toUpperCase()) &&
+    (String(l.chapter_name||"").toLowerCase().includes(q)||("lecture "+l.lecture_number).includes(q)||String(l.caption||"").toLowerCase().includes(q)));
+  if(!rows.length){list.innerHTML='<div class="empty-state">No uploaded lectures for this subject yet.</div>';return;}
   rows.forEach(l=>{
     const card=document.createElement("article");card.className="lecture-card";
     const thumb=document.createElement("div");thumb.className="lecture-thumb";thumb.textContent="▶";
     const meta=document.createElement("div");meta.className="lecture-meta";
-    const title=document.createElement("strong");title.textContent=l.title;
-    const small=document.createElement("small");small.textContent=l.duration||"Recorded class";
+    const title=document.createElement("strong");title.textContent="Lecture "+l.lecture_number;
+    const small=document.createElement("small");small.textContent=l.chapter_name;
     meta.append(title,small);
-    const btn=document.createElement("button");btn.className="watch-button";btn.textContent=l.videoUrl?"WATCH":"COMING SOON";btn.disabled=!l.videoUrl;
-    btn.addEventListener("click",()=>{if(!l.videoUrl)return;if(tg?.openLink)tg.openLink(l.videoUrl);else window.open(l.videoUrl,"_blank","noopener");});
+    const btn=document.createElement("button");btn.className="watch-button";
+    btn.textContent=sendingLecture?"PLEASE WAIT":(accessActive&&accessRemaining>0?"SEND TO BOT":"LOCKED");
+    btn.disabled=!accessActive||accessRemaining<=0||sendingLecture;
+    btn.addEventListener("click",async()=>{
+      if(!accessActive){accessMessage.textContent="Unlock your 12-hour access first.";return;}
+      sendingLecture=true;renderLectures();
+      try{
+        const r=await fetch("https://ca-study-hub.onrender.com/api/lectures/send",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({initData:tg.initData,lecture_id:l.id})});
+        const d=await r.json();if(!r.ok)throw new Error(d.message||"Could not send lecture");
+        accessMessage.textContent="✅ Lecture sent to your Telegram bot chat!";
+        await refreshAccess();
+      }catch(e){accessMessage.textContent=e.message;}
+      finally{sendingLecture=false;renderLectures();}
+    });
     card.append(thumb,meta,btn);list.appendChild(card);
   });
 }
+
 search.addEventListener("input",renderLectures);
 document.getElementById("all-lectures").addEventListener("click",()=>{search.value="";selected=COURSE_DATA[0].id;renderSubjects();renderLectures();});
 document.querySelectorAll(".nav-item").forEach(btn=>btn.addEventListener("click",()=>{
@@ -73,8 +103,8 @@ function showAccess(data){
 }
 async function refreshAccess(){
   if(!tg?.initData){accessMessage.textContent="Open this Mini App from the Telegram bot to verify your account.";unlockButton.textContent="Open via Telegram";unlockButton.disabled=true;return;}
-  try{showAccess(await accessRequest("status"));}
+  try{const data=await accessRequest("status");showAccess(data);accessActive=!!data.active;accessRemaining=Number(data.remaining||0);renderLectures();}
   catch(e){accessMessage.textContent=e.message;unlockButton.textContent="Try again";unlockButton.disabled=false;}
 }
-unlockButton.addEventListener("click",async()=>{unlockButton.disabled=true;unlockButton.textContent="Activating…";try{showAccess(await accessRequest("unlock"));}catch(e){accessMessage.textContent=e.message;unlockButton.disabled=false;unlockButton.textContent="Try again";}});
+unlockButton.addEventListener("click",async()=>{unlockButton.disabled=true;unlockButton.textContent="Activating…";try{const data=await accessRequest("unlock");showAccess(data);accessActive=!!data.active;accessRemaining=Number(data.remaining||0);renderLectures();}catch(e){accessMessage.textContent=e.message;unlockButton.disabled=false;unlockButton.textContent="Try again";}});
 refreshAccess();
