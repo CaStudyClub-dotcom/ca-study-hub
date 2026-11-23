@@ -86,7 +86,7 @@ const accessMessage=document.getElementById("access-message");
 const unlockButton=document.getElementById("unlock-button");
 const accessDetails=document.getElementById("access-details");
 const accessExpiry=document.getElementById("access-expiry");
-const accessRemaining=document.getElementById("access-remaining");
+const accessRemainingEl=document.getElementById("access-remaining");
 const ACCESS_API="https://ca-study-hub.onrender.com/api/access";
 async function accessRequest(action){
   if(!tg?.initData) throw new Error("Please open this app from the CA Study Hub Telegram bot.");
@@ -100,7 +100,7 @@ function showAccess(data){
   document.getElementById("access-icon").textContent=active?"🔓":"🔒";
   accessMessage.textContent=data.message||(active?"Your study pass is active.":"Unlock your study pass to start learning.");
   accessDetails.hidden=!active;
-  if(active){accessExpiry.textContent="Expires: "+new Date(data.expires_at).toLocaleString();accessRemaining.textContent=data.remaining+" / 10 lectures left";}
+  if(active){accessExpiry.textContent="Expires: "+new Date(data.expires_at).toLocaleString();accessRemainingEl.textContent=data.remaining+" / 10 lectures left";}
   unlockButton.disabled=false;unlockButton.textContent=active?"Access active ✓":"Unlock free access";unlockButton.classList.toggle("is-active",active);
 }
 async function refreshAccess(){
