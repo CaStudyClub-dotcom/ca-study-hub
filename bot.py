@@ -575,3 +575,77 @@ def configure_webhook():
 
 
 configure_webhook()
+
+
+# Telegram Mini App signed-data verification and access API.
+import hashlib
+import hmac
+import json
+from urllib.parse import parse_qsl
+from flask import jsonify
+
+
+def verify_telegram_init_data(init_data):
+    if not BOT_TOKEN or not init_data or not isinstance(init_data, str):
+        return None
+    try:
+        parsed = dict(parse_qsl(init_data, keep_blank_values=True))
+        received_hash = parsed.pop("hash", None)
+        if not received_hash:
+            return None
+        data_check_string = "\n".join(
+            f"{key}={value}" for key, value in sorted(parsed.items())
+        )
+        secret_key = hmac.new(b"WebAppData", BOT_TOKEN.encode("utf-8"), hashlib.sha256).digest()
+        calculated_hash = hmac.new(secret_key, data_check_string.encode("utf-8"), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(calculated_hash, received_hash):
+            return None
+        auth_date = int(parsed.get("auth_date", "0"))
+        now_ts = int(datetime.now(timezone.utc).timestamp())
+        if auth_date <= 0 or now_ts - auth_date > 86400 or auth_date > now_ts + 60:
+            return None
+        user_id = json.loads(parsed.get("user", "{}")).get("id")
+        return user_id if isinstance(user_id, int) else None
+    except (ValueError, TypeError, json.JSONDecodeError):
+        return None
+
+
+def access_payload(user_id):
+    session = active_session(user_id)
+    if not session:
+        return {"active": False, "remaining": 10, "message": "Your 12-hour study pass is ready to unlock."}
+    used = int(session.get("lectures_sent") or 0)
+    return {"active": True, "expires_at": session["expires_at"], "lectures_sent": used,
+            "remaining": max(0, 10-used), "message": "Your study pass is active. Keep learning!"}
+
+
+@app.after_request
+def add_miniapp_cors(response):
+    if request.headers.get("Origin") == "https://castudyclub-dotcom.github.io":
+        response.headers["Access-Control-Allow-Origin"] = "https://castudyclub-dotcom.github.io"
+        response.headers["Vary"] = "Origin"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+        response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+    return response
+
+
+@app.route("/api/access/<action>", methods=["POST", "OPTIONS"])
+def miniapp_access(action):
+    if request.method == "OPTIONS":
+        return ("", 204)
+    if action not in ("status", "unlock"):
+        return jsonify({"message": "Unknown access action."}), 404
+    body = request.get_json(silent=True) or {}
+    user_id = verify_telegram_init_data(body.get("initData"))
+    if not user_id:
+        return jsonify({"message": "Telegram verification failed. Please reopen the Mini App from the bot."}), 401
+    try:
+        if action == "unlock" and not active_session(user_id):
+            now = datetime.now(timezone.utc)
+            db_insert("access_sessions", {"telegram_user_id": user_id, "started_at": now.isoformat(),
+                       "expires_at": (now + timedelta(hours=12)).isoformat(), "lectures_sent": 0})
+        return jsonify(access_payload(user_id))
+    except Exception:
+        logging.exception("Mini App access API failed")
+        return jsonify({"message": "Access service is temporarily unavailable. Please retry."}), 503
+
