@@ -19,10 +19,7 @@ function renderSubjects(){
   });
 }
 
-let serverLectures=[
-  {id:1,subject:"ACCOUNTS",chapter_name:"Introduction",lecture_number:7,caption:"SUBJECT: ACCOUNTS\\nCHAPTER: Introduction\\nLECTURE: 07"},
-  {id:3,subject:"ACCOUNTS",chapter_name:"Introduction",lecture_number:8,caption:"SUBJECT: ACCOUNTS\\nCHAPTER: Introduction\\nLECTURE: 08"}
-];
+let serverLectures=[];
 let accessActive=false;
 let accessRemaining=0;
 let sendingLecture=false;
@@ -62,6 +59,7 @@ function renderLectures(){
         const d=await r.json();if(!r.ok)throw new Error(d.message||"Could not send lecture");
         accessMessage.textContent="✅ Lecture sent to your Telegram bot chat!";
         await refreshAccess();
+loadLectureCatalogue();
       }catch(e){accessMessage.textContent=e.message;}
       finally{sendingLecture=false;renderLectures();}
     });
