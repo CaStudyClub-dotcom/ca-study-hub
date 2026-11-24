@@ -109,6 +109,99 @@ def db_update(table, filters, payload):
     response.raise_for_status()
 
 
+def save_resource(channel_post, resource_type):
+    caption = channel_post.get("caption", "") or ""
+    fields = {}
+    for line in caption.splitlines():
+        if ":" in line:
+            key, value = line.split(":", 1)
+            fields[key.strip().upper()] = value.strip()
+
+    subject = fields.get("SUBJECT")
+    title = fields.get("TITLE")
+    chapter = fields.get("CHAPTER")
+    if not subject or not title:
+        raise ValueError(
+            "PDF caption format required:\n"
+            f"TYPE: {resource_type}\n"
+            "SUBJECT: ACCOUNTS\n"
+            "CHAPTER: Introduction (optional for EBOOK)\n"
+            "TITLE: Chapter 1 Notes"
+        )
+
+    if not channel_post.get("document"):
+        raise ValueError("Please upload the PDF as a Telegram document.")
+
+    payload = {
+        "resource_type": resource_type,
+        "subject": subject.upper(),
+        "chapter_name": chapter or None,
+        "title": title,
+        "channel_id": channel_post["chat"]["id"],
+        "message_id": channel_post["message_id"],
+        "caption": caption
+    }
+    headers = supabase_headers()
+    headers["Prefer"] = "resolution=merge-duplicates,return=minimal"
+    response = requests.post(
+        f"{SUPABASE_URL}/rest/v1/study_resources?on_conflict=channel_id,message_id",
+        headers=headers, json=payload, timeout=25
+    )
+    if not response.ok:
+        raise Exception(f"Supabase HTTP {response.status_code}: {response.text[:1500]}")
+    return payload
+
+
+def show_resources(chat_id, resource_type):
+    rows = db_get("study_resources", {
+        "resource_type": f"eq.{resource_type}",
+        "select": "id,subject,chapter_name,title",
+        "order": "subject.asc,chapter_name.asc,title.asc",
+        "limit": "1000"
+    })
+    subjects = sorted({row["subject"] for row in rows if row.get("subject")})
+    if not subjects:
+        send_message(chat_id, f"📭 No {resource_type.lower()} PDFs uploaded yet.")
+        return
+    buttons = [[{"text": f"📚 {subject}", "callback_data": f"rs:{resource_type}:{subject}"}]
+               for subject in subjects]
+    send_message(chat_id, f"📚 SELECT SUBJECT — {resource_type}", {"inline_keyboard": buttons})
+
+
+def show_resource_items(chat_id, resource_type, subject):
+    rows = db_get("study_resources", {
+        "resource_type": f"eq.{resource_type}",
+        "subject": f"eq.{subject}",
+        "select": "id,chapter_name,title",
+        "order": "chapter_name.asc,title.asc",
+        "limit": "1000"
+    })
+    if not rows:
+        send_message(chat_id, "No PDFs found.")
+        return
+    buttons = [[{"text": f"📄 {((row.get('chapter_name') + ' — ') if row.get('chapter_name') else '')}{row['title']}",
+                 "callback_data": f"rd:{row['id']}"}] for row in rows]
+    buttons.append([{"text": "⬅️ Back to subjects", "callback_data": f"rb:{resource_type}"}])
+    send_message(chat_id, f"📚 {subject} — {resource_type}\nChoose a PDF:", {"inline_keyboard": buttons})
+
+
+def deliver_resource(chat_id, resource_id):
+    rows = db_get("study_resources", {
+        "id": f"eq.{resource_id}",
+        "select": "title,subject,chapter_name,channel_id,message_id",
+        "limit": "1"
+    })
+    if not rows:
+        send_message(chat_id, "PDF not found.")
+        return
+    item = rows[0]
+    telegram("copyMessage", {
+        "chat_id": chat_id,
+        "from_chat_id": item["channel_id"],
+        "message_id": item["message_id"]
+    })
+
+
 def save_lecture(channel_post):
     caption = channel_post.get("caption", "")
     fields = {}
@@ -396,7 +489,14 @@ def handle_callback(query):
     try:
         answer_callback(callback_id)
 
-        if data == "back:subjects":
+        if data.startswith("rb:"):
+            show_resources(chat_id, data[3:])
+        elif data.startswith("rs:"):
+            _, resource_type, subject = data.split(":", 2)
+            show_resource_items(chat_id, resource_type, subject)
+        elif data.startswith("rd:"):
+            deliver_resource(chat_id, int(data[3:]))
+        elif data == "back:subjects":
             show_subjects(chat_id)
 
         elif data.startswith("sub:"):
@@ -441,15 +541,25 @@ def webhook():
 
         if post.get("video") or post.get("document"):
             try:
-                saved = save_lecture(post)
+                caption_upper = (post.get("caption") or "").upper()
+                if "TYPE: NOTES" in caption_upper:
+                    saved = save_resource(post, "NOTES")
+                    saved_label = "NOTE PDF SAVED"
+                elif "TYPE: EBOOK" in caption_upper or "TYPE: E-BOOK" in caption_upper:
+                    saved = save_resource(post, "EBOOK")
+                    saved_label = "E-BOOK PDF SAVED"
+                else:
+                    saved = save_lecture(post)
+                    saved_label = "LECTURE SAVED"
 
                 if ADMIN_CHAT_ID:
                     send_message(
                         ADMIN_CHAT_ID,
-                        "✅ LECTURE SAVED!\n\n"
-                        f"Subject: {saved['subject']}\n"
-                        f"Chapter: {saved['chapter_name']}\n"
-                        f"Lecture: {saved['lecture_number']}"
+                        f"✅ {saved_label}!\\n\\n"
+                        f"Type: {saved.get('resource_type', 'LECTURE')}\\n"
+                        f"Subject: {saved['subject']}\\n"
+                        f"Chapter: {saved.get('chapter_name') or '-'}\\n"
+                        f"Title/No.: {saved.get('title', saved.get('lecture_number'))}"
                     )
 
             except Exception as error:
@@ -525,6 +635,16 @@ def webhook():
         except Exception as error:
             logging.exception("Access check failed")
             send_message(chat_id, f"❌ ERROR\n\n{str(error)[:1200]}")
+
+    elif command in ("/notes", "/ebooks"):
+        try:
+            if not active_session(chat_id):
+                send_message(chat_id, "🔒 First activate access using /unlock.")
+            else:
+                show_resources(chat_id, "NOTES" if command == "/notes" else "EBOOK")
+        except Exception as error:
+            logging.exception("PDF library failed")
+            send_message(chat_id, f"❌ PDF LIBRARY ERROR\\n\\n{str(error)[:1200]}")
 
     elif command == "/lectures":
         session = active_session(chat_id)
